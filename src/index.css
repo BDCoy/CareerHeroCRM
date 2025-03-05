@@ -1,0 +1,83 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom scrollbar styles */
+@layer utilities {
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 3px;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 3px;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background: #a1a1a1;
+  }
+  
+  .scrollbar-thumb-gray-300::-webkit-scrollbar-thumb {
+    background: #d1d5db;
+  }
+  
+  .scrollbar-track-gray-100::-webkit-scrollbar-track {
+    background: #f3f4f6;
+  }
+}
+
+/* Flowbite-inspired table styles */
+.table-responsive {
+  @apply relative overflow-x-auto shadow-sm sm:rounded-lg;
+}
+
+.table-flowbite {
+  @apply w-full text-sm text-left rtl:text-right text-gray-500;
+}
+
+.table-flowbite thead {
+  @apply text-xs text-gray-700 uppercase bg-gray-50;
+}
+
+.table-flowbite th {
+  @apply px-4 sm:px-6 py-3;
+}
+
+.table-flowbite tbody tr {
+  @apply border-b hover:bg-gray-100;
+}
+
+.table-flowbite tbody tr:nth-child(even) {
+  @apply bg-gray-50;
+}
+
+.table-flowbite tbody tr:nth-child(odd) {
+  @apply bg-white;
+}
+
+.table-flowbite td {
+  @apply px-4 sm:px-6 py-4;
+}
+
+.table-flowbite th[scope="row"] {
+  @apply font-medium text-gray-900 whitespace-nowrap;
+}
+
+/* Fix for content alignment with sidebar */
+@media (min-width: 1024px) {
+  .sidebar-content-wrapper {
+    display: flex;
+    min-height: 100vh;
+  }
+  
+  .sidebar-content {
+    flex: 1;
+    transition: margin-left 0.3s ease;
+  }
+}
