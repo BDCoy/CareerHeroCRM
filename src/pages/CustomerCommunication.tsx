@@ -163,7 +163,7 @@ const CustomerCommunication: React.FC = () => {
   return (
     <div>
       <div className="mb-6">
-        <Link to={`/customers/${id}`} className="inline-flex items-center text-indigo-600 hover:text-indigo-900">
+        <Link to={`/dashboard/customers/${id}`} className="inline-flex items-center text-indigo-600 hover:text-indigo-900">
           <ArrowLeft className="h-4 w-4 mr-1" />
           Back to customer details
         </Link>

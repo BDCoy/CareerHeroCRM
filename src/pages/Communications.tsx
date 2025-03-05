@@ -185,7 +185,7 @@ const Communications: React.FC = () => {
                     </div>
                     <div className="ml-3">
                       <div className="flex items-center">
-                        <Link to={`/customers/${comm.customerid}`} className="font-medium text-indigo-600 hover:text-indigo-900">
+                        <Link to={`/dashboard/customers/${comm.customerid}`} className="font-medium text-indigo-600 hover:text-indigo-900">
                           {comm.customername}
                         </Link>
                         <span className="mx-2 text-gray-400">•</span>
@@ -222,7 +222,7 @@ const Communications: React.FC = () => {
                 </div>
                 <div className="mt-2 flex justify-end">
                   <Link
-                    to={`/customers/${comm.customerid}/communicate`}
+                    to={`/dashboard/customers/${comm.customerid}/communicate`}
                     className="text-sm text-indigo-600 hover:text-indigo-900"
                   >
                     Send new message

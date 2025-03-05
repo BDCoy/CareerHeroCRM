@@ -278,7 +278,7 @@ const CustomerList: React.FC = () => {
                         </div>
                         <div className="ml-4">
                           <div className="text-sm font-medium text-gray-900">
-                            <Link to={`/customers/${customer.id}`} className="hover:text-indigo-600">
+                            <Link to={`/dashboard/customers/${customer.id}`} className="hover:text-indigo-600">
                               {customer.firstname} {customer.lastname}
                             </Link>
                           </div>
@@ -318,7 +318,7 @@ const CustomerList: React.FC = () => {
                         <div className="flex space-x-1">
                           {/* Email button */}
                           <Link
-                            to={`/customers/${customer.id}/communicate`}
+                            to={`/dashboard/customers/${customer.id}/communicate`}
                             className="p-2 text-blue-600 hover:text-blue-900 hover:bg-blue-50 rounded-full"
                             title="Email"
                           >
@@ -330,7 +330,7 @@ const CustomerList: React.FC = () => {
                           
                           {/* SMS button */}
                           <Link
-                            to={`/customers/${customer.id}/communicate?tab=sms`}
+                            to={`/dashboard/customers/${customer.id}/communicate?tab=sms`}
                             className="p-2 text-purple-600 hover:text-purple-900 hover:bg-purple-50 rounded-full"
                             title="SMS"
                           >
@@ -341,7 +341,7 @@ const CustomerList: React.FC = () => {
                           
                           {/* WhatsApp button */}
                           <Link
-                            to={`/customers/${customer.id}/communicate?tab=whatsapp`}
+                            to={`/dashboard/customers/${customer.id}/communicate?tab=whatsapp`}
                             className="p-2 text-green-600 hover:text-green-900 hover:bg-green-50 rounded-full"
                             title="WhatsApp"
                           >
@@ -352,7 +352,7 @@ const CustomerList: React.FC = () => {
                         </div>
                         
                         <Link
-                          to={`/customers/${customer.id}/edit`}
+                          to={`/dashboard/customers/${customer.id}/edit`}
                           className="p-2 text-blue-600 hover:text-blue-900 hover:bg-blue-50 rounded-full"
                           title="Edit"
                         >
@@ -396,7 +396,7 @@ const CustomerList: React.FC = () => {
                       </span>
                     </div>
                     <div className="ml-3 flex-1">
-                      <Link to={`/customers/${customer.id}`} className="block">
+                      <Link to={`/dashboard/customers/${customer.id}`} className="block">
                         <div className="text-base font-medium text-gray-900">
                           {customer.firstname} {customer.lastname}
                         </div>
@@ -444,7 +444,7 @@ const CustomerList: React.FC = () => {
                     <div className="flex space-x-1">
                       {/* Email button */}
                       <Link
-                        to={`/customers/${customer.id}/communicate`}
+                        to={`/dashboard/customers/${customer.id}/communicate`}
                         className="flex-1 flex items-center justify-center p-2 text-blue-600 hover:bg-blue-50 rounded-md"
                       >
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -456,7 +456,7 @@ const CustomerList: React.FC = () => {
                       
                       {/* SMS button */}
                       <Link
-                        to={`/customers/${customer.id}/communicate?tab=sms`}
+                        to={`/dashboard/customers/${customer.id}/communicate?tab=sms`}
                         className="flex-1 flex items-center justify-center p-2 text-purple-600 hover:bg-purple-50 rounded-md"
                       >
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -467,7 +467,7 @@ const CustomerList: React.FC = () => {
                       
                       {/* WhatsApp button */}
                       <Link
-                        to={`/customers/${customer.id}/communicate?tab=whatsapp`}
+                        to={`/dashboard/customers/${customer.id}/communicate?tab=whatsapp`}
                         className="flex-1 flex items-center justify-center p-2 text-green-600 hover:bg-green-50 rounded-md"
                       >
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1" viewBox="0 0 24 24" fill="currentColor">
@@ -479,7 +479,7 @@ const CustomerList: React.FC = () => {
                     
                     <div className="flex space-x-1">
                       <Link
-                        to={`/customers/${customer.id}/edit`}
+                        to={`/dashboard/customers/${customer.id}/edit`}
                         className="p-2 text-blue-600 hover:bg-blue-50 rounded-md"
                       >
                         <Edit className="h-5 w-5" />

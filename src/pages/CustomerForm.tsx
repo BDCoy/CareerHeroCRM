@@ -50,11 +50,11 @@ const CustomerFormPage: React.FC = () => {
       if (isEditMode && id) {
         await editCustomer(id, mergedData);
         toast.success('Customer updated successfully');
-        navigate(`/customers/${id}`);
+        navigate(`/dashboard/customers/${id}`);
       } else {
         const newCustomer = await addCustomer(mergedData);
         toast.success('Customer added successfully');
-        navigate(`/customers/${newCustomer.id}`);
+        navigate(`/dashboard/customers/${newCustomer.id}`);
       }
     } catch (error) {
       console.error('Error saving customer:', error);
@@ -108,7 +108,7 @@ const CustomerFormPage: React.FC = () => {
   return (
     <div>
       <div className="mb-6">
-        <Link to={isEditMode ? `/customers/${id}` : '/'} className="inline-flex items-center text-indigo-600 hover:text-indigo-900">
+        <Link to={isEditMode ? `/dashboard/customers/${id}` : '/dashboard'} className="inline-flex items-center text-indigo-600 hover:text-indigo-900">
           <ArrowLeft className="h-4 w-4 mr-1" />
           {isEditMode ? 'Back to customer details' : 'Back to customers'}
         </Link>

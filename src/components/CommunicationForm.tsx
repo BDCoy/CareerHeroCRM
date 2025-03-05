@@ -229,7 +229,7 @@ const CommunicationForm: React.FC<CommunicationFormProps> = ({
                   <p>Need more advanced email features like templates, attachments, or a full inbox?</p>
                   <div className="mt-2">
                     <Link
-                      to={`/customers/${customerId}/email`}
+                      to={`/dashboard/customers/${customerId}/email`}
                       className="text-blue-800 font-medium hover:text-blue-900 underline"
                     >
                       Go to Email Center →

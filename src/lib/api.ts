@@ -262,13 +262,16 @@ Graduation Year: 2018`;
 };
 
 // Communication APIs
-export const sendEmail = async (to: string, subject: string, body: string, customerId: string): Promise<{ communication: Communication, sendgridResponse?: any, smtpResponse?: any }> => {
+export const sendEmail = async (to: string, subject: string, body: string, attachments: any, cc: string[] | undefined, bcc: string[] | undefined, customerId: string): Promise<{ communication: Communication, sendgridResponse?: any, smtpResponse?: any }> => {
   try {
     // Create email data
     const emailData: EmailData = {
       to,
       subject,
-      body
+      body,
+      attachments,
+      cc,
+      bcc,
     };
     
     // Send email using the email service

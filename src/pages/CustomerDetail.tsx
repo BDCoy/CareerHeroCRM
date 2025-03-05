@@ -68,6 +68,8 @@ const CustomerDetail: React.FC = () => {
       default: return 'bg-gray-100 text-gray-800';
     }
   };
+
+  console.log(selectedCustomer);
   
   return (
     <div>
@@ -104,7 +106,7 @@ const CustomerDetail: React.FC = () => {
             <div className="flex space-x-1">
               {/* Email button */}
               <Link
-                to={`/customers/${id}/communicate`}
+                to={`/dashboard/customers/${id}/communicate`}
                 className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -116,7 +118,7 @@ const CustomerDetail: React.FC = () => {
               
               {/* SMS button */}
               <Link
-                to={`/customers/${id}/communicate?tab=sms`}
+                to={`/dashboard/customers/${id}/communicate?tab=sms`}
                 className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-white bg-purple-600 hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -127,7 +129,7 @@ const CustomerDetail: React.FC = () => {
               
               {/* WhatsApp button */}
               <Link
-                to={`/customers/${id}/communicate?tab=whatsapp`}
+                to={`/dashboard/customers/${id}/communicate?tab=whatsapp`}
                 className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
               >
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" viewBox="0 0 24 24" fill="currentColor">
@@ -138,7 +140,7 @@ const CustomerDetail: React.FC = () => {
             </div>
             
             <Link
-              to={`/customers/${id}/edit`}
+              to={`/dashboard/customers/${id}/edit`}
               className="inline-flex items-center px-3 py-1.5 border border-gray-300 text-xs font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
             >
               <Edit className="h-4 w-4 mr-1" />
@@ -241,7 +243,7 @@ const CustomerDetail: React.FC = () => {
         </div>
       </div>
       
-      {selectedCustomer.resumedata && (
+      {Object.keys(selectedCustomer.resumedata).length > 0 && (
         <div className="bg-white shadow overflow-hidden sm:rounded-lg">
           <div className="px-4 py-5 sm:px-6">
             <h3 className="text-lg leading-6 font-medium text-gray-900 flex items-center">
