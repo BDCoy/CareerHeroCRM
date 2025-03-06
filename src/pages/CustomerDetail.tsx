@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Edit, Trash2, FileText, Calendar, Briefcase, GraduationCap, Phone } from 'lucide-react';
+import { ArrowLeft, Edit, Trash2, FileText, Calendar, Briefcase, GraduationCap } from 'lucide-react';
 import { useCustomerStore } from '../store/customerStore';
 import { format } from 'date-fns';
 

@@ -1,13 +1,39 @@
 import { serve } from "https://deno.land/std@0.140.0/http/server.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import sgMail from "npm:@sendgrid/mail";
-import { extractResumeInfo } from "../_shared/openai.ts"; // Resume extraction function
+import pdf from "npm:pdf-parse/lib/pdf-parse.js";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type",
 };
+
+async function extractTextFromPDF(pdfUrl: string) {
+  console.log(pdfUrl);
+  const response = await fetch(pdfUrl);
+  const data = await pdf(await response.arrayBuffer());
+  return data.text;
+}
+async function extractTextFromFile(
+  file: Uint8Array,
+  contentType: string,
+  fileUrl: string
+): Promise<string> {
+  try {
+    if (contentType === "application/pdf") {
+      return await extractTextFromPDF(fileUrl);
+    } else if (contentType === "text/plain") {
+      return new TextDecoder("utf-8").decode(file);
+    } else {
+      console.warn(`⚠️ Unsupported file type: ${contentType}`);
+      return `Unsupported file type: ${contentType}. Please upload a PDF or text file.`;
+    }
+  } catch (error) {
+    console.error("❌ Error extracting text from file:", error);
+    return `Failed to extract text from ${contentType} file.`;
+  }
+}
 
 // OpenAI API wrapper for resume parsing
 async function extractResumeInfo(text: string, apiKey: string) {
@@ -19,7 +45,7 @@ async function extractResumeInfo(text: string, apiKey: string) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "gpt-4",
+        model: "gpt-4o",
         messages: [
           {
             role: "system",
@@ -29,7 +55,7 @@ CRITICAL TASK: Extract the following information from resumes with MAXIMUM preci
 - First name
 - Last name
 - Email address (MUST be complete and valid format: username@domain.tld)
-- Phone number (MUST be complete with country code)
+- Phone number (MUST be complete with country code and all digits)
 - Skills (as an array)
 - Work experience (company, position, dates, description)
 - Education (institution, degree, field, graduation date)
@@ -89,7 +115,9 @@ COMPLETENESS IS MANDATORY: Never truncate or abbreviate email addresses or phone
     }
 
     const data = await response.json();
-    return JSON.parse(data.choices[0].message.content);
+    const content = data.choices[0].message.content || "{}";
+    const result = JSON.parse(content);
+    return result;
   } catch (error) {
     console.error("Error calling OpenAI:", error);
     return {};
@@ -106,19 +134,19 @@ function base64ToBlob(base64String: string, contentType: string): Blob {
   return new Blob([bytes], { type: contentType });
 }
 
-function base64ToText(base64String: string): string {
-  // Decode Base64 string into binary
-  const binaryString = atob(base64String);
+// function base64ToText(base64String: string): string {
+//   // Decode Base64 string into binary
+//   const binaryString = atob(base64String);
 
-  // Convert binary string into a Uint8Array (byte buffer)
-  const byteArray = new Uint8Array(binaryString.length);
-  for (let i = 0; i < binaryString.length; i++) {
-    byteArray[i] = binaryString.charCodeAt(i);
-  }
+//   // Convert binary string into a Uint8Array (byte buffer)
+//   const byteArray = new Uint8Array(binaryString.length);
+//   for (let i = 0; i < binaryString.length; i++) {
+//     byteArray[i] = binaryString.charCodeAt(i);
+//   }
 
-  // Decode the Uint8Array into a UTF-8 string
-  return new TextDecoder("utf-8").decode(byteArray);
-}
+//   // Decode the Uint8Array into a UTF-8 string
+//   return new TextDecoder("utf-8").decode(byteArray);
+// }
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -157,9 +185,7 @@ serve(async (req) => {
 
     // Handle resume attachments
     const resumeAttachments = attachments?.filter((att) =>
-      [".pdf", ".doc", ".docx", ".txt"].some((ext) =>
-        att.filename.toLowerCase().endsWith(ext)
-      )
+      [".pdf", ".txt"].some((ext) => att.filename.toLowerCase().endsWith(ext))
     );
 
     if (resumeAttachments?.length > 0) {
@@ -168,13 +194,17 @@ serve(async (req) => {
       const filePath = `resumes/${fileName}`;
 
       // Extract Base64 data (remove "data:application/pdf;base64," prefix)
-      const base64Data = attachment.content.split(",")[1]; // Get only the Base64-encoded part
-
+      const base64Data = attachment.content.includes(",")
+        ? attachment.content.split(",")[1] // If it's a Data URI
+        : attachment.content;
       // Convert Base64 to Blob
+
+      const binaryString = atob(base64Data);
+      const fileBuffer = new Uint8Array(binaryString.length);
       const fileBlob = base64ToBlob(base64Data, attachment.contentType);
 
       // Upload file to Supabase Storage
-      const { data: uploadData, error: uploadError } = await supabase.storage
+      const { error: uploadError } = await supabase.storage
         .from("customer-files")
         .upload(filePath, fileBlob, {
           contentType: attachment.contentType,
@@ -187,21 +217,25 @@ serve(async (req) => {
       const { data: urlData } = supabase.storage
         .from("customer-files")
         .getPublicUrl(filePath);
+
       resumeUrl = urlData.publicUrl;
 
       // Extract text for OpenAI processing
-      let resumeText = "";
-      if (
-        attachment.contentType === "text/plain" ||
-        attachment.contentType === "application/pdf"
-      ) {
-        resumeText = base64ToText(base64Data);
-      } else {
-        resumeText = body || "";
-      }
+      const resumeText = await extractTextFromFile(
+        fileBuffer,
+        attachment.contentType,
+        resumeUrl
+      );
 
       // Extract structured information using OpenAI
       extractedInfo = await extractResumeInfo(resumeText, openaiApiKey);
+
+      if (!extractedInfo || Object.keys(extractedInfo).length === 0) {
+        console.error("❌ OpenAI did not return valid resume data.");
+        extractedInfo = {};
+      }
+
+      console.log("✅ Extracted Resume Data:", extractedInfo);
     }
 
     // Check if customer exists
