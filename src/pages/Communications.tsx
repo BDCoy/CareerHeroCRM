@@ -1,96 +1,77 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Mail, MessageSquare, Filter, Search } from 'lucide-react';
+import { Mail, MessageSquare, Filter, Search, Eye, Trash2, X, AlertCircle } from 'lucide-react';
 import { useCommunicationStore } from '../store/communicationStore';
-import { useCustomerStore } from '../store/customerStore';
 import { format } from 'date-fns';
+import { Communication } from '../types';
+import toast from 'react-hot-toast';
 
 const Communications: React.FC = () => {
-  const { customers, fetchCustomers } = useCustomerStore();
-  const [selectedCustomerId, setSelectedCustomerId] = useState<string>('all');
+  const { communications, loading, error, fetchAllCommunications, softDeleteCommunication } = useCommunicationStore();
   const [communicationType, setCommunicationType] = useState<'all' | 'email' | 'sms' | 'whatsapp'>('all');
+  const [communicationStatus, setCommunicationStatus] = useState<'all' | 'sent' | 'archived' | 'deleted'>('all');
   const [searchTerm, setSearchTerm] = useState('');
   
-  // Get all communications from all customers
-  const [allCommunications, setAllCommunications] = useState<any[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  // Delete dialog state
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [communicationToDelete, setCommunicationToDelete] = useState<string | null>(null);
+  
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const rowsPerPage = 10;
   
   useEffect(() => {
-    fetchCustomers();
-  }, [fetchCustomers]);
-  
-  useEffect(() => {
-    const fetchAllCommunications = async () => {
-      setIsLoading(true);
-      try {
-        // For demo purposes, we'll create some mock communications
-        const mockCommunications = [];
-        
-        // Generate some mock communications for each customer
-        for (const customer of customers) {
-          // Email communications
-          mockCommunications.push({
-            id: `email-${customer.id}-1`,
-            customerid: customer.id,
-            customername: `${customer.firstname} ${customer.lastname}`,
-            type: 'email',
-            content: `Subject: Follow-up on our conversation\n\nHello ${customer.firstname},\n\nThank you for your interest in our products. I wanted to follow up on our conversation from last week.`,
-            sentat: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000).toISOString(),
-            status: 'sent'
-          });
-          
-          // SMS communications
-          if (Math.random() > 0.3) {
-            mockCommunications.push({
-              id: `sms-${customer.id}-1`,
-              customerid: customer.id,
-              customername: `${customer.firstname} ${customer.lastname}`,
-              type: 'sms',
-              content: `Hi ${customer.firstname}, just a reminder about our meeting tomorrow at 2pm. Looking forward to it!`,
-              sentat: new Date(Date.now() - Math.random() * 15 * 24 * 60 * 60 * 1000).toISOString(),
-              status: 'delivered'
-            });
-          }
-          
-          // WhatsApp communications
-          if (Math.random() > 0.6) {
-            mockCommunications.push({
-              id: `whatsapp-${customer.id}-1`,
-              customerid: customer.id,
-              customername: `${customer.firstname} ${customer.lastname}`,
-              type: 'whatsapp',
-              content: `Hello ${customer.firstname}, I've sent you the proposal via email. Let me know if you have any questions!`,
-              sentat: new Date(Date.now() - Math.random() * 7 * 24 * 60 * 60 * 1000).toISOString(),
-              status: 'sent'
-            });
-          }
-        }
-        
-        // Sort by date, newest first
-        mockCommunications.sort((a, b) => new Date(b.sentat).getTime() - new Date(a.sentat).getTime());
-        
-        setAllCommunications(mockCommunications);
-      } catch (error) {
-        console.error('Error fetching communications:', error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    
-    if (customers.length > 0) {
+    fetchAllCommunications();
+  }, [fetchAllCommunications]);
+
+  const openDeleteDialog = (id: string) => {
+    setCommunicationToDelete(id);
+    setIsDeleteDialogOpen(true);
+  };
+
+  const closeDeleteDialog = () => {
+    setCommunicationToDelete(null);
+    setIsDeleteDialogOpen(false);
+  };
+
+  const handleDelete = async () => {
+    if (!communicationToDelete) return;
+
+    try {
+      await softDeleteCommunication(communicationToDelete);
+      toast.success('Communication moved to trash');
+      closeDeleteDialog();
+      // Refresh the communications list
       fetchAllCommunications();
+    } catch (error) {
+      console.error('Error deleting communication:', error);
+      toast.error('Failed to delete communication');
     }
-  }, [customers]);
+  };
   
   // Filter communications based on selected filters
-  const filteredCommunications = allCommunications.filter(comm => {
-    const matchesCustomer = selectedCustomerId === 'all' || comm.customerid === selectedCustomerId;
+  const filteredCommunications = communications.filter(comm => {
     const matchesType = communicationType === 'all' || comm.type === communicationType;
-    const matchesSearch = comm.content.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                         comm.customername.toLowerCase().includes(searchTerm.toLowerCase());
     
-    return matchesCustomer && matchesType && matchesSearch;
+    // Handle status filtering
+    const matchesStatus = communicationStatus === 'all' || 
+      (communicationStatus === 'deleted' && comm.status === 'deleted') ||
+      (communicationStatus === 'archived' && comm.status === 'archived') ||
+      (communicationStatus === 'sent' && (comm.status === 'sent' || comm.status === 'delivered'));
+    
+    // Handle search
+    const matchesSearch = 
+      comm.content.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (comm.metadata?.from || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (comm.metadata?.to || '').toLowerCase().includes(searchTerm.toLowerCase());
+    
+    return matchesType && matchesStatus && matchesSearch;
   });
+
+  // Calculate pagination
+  const totalPages = Math.ceil(filteredCommunications.length / rowsPerPage);
+  const startIndex = (currentPage - 1) * rowsPerPage;
+  const paginatedCommunications = filteredCommunications.slice(startIndex, startIndex + rowsPerPage);
   
   const getTypeIcon = (type: string) => {
     switch (type) {
@@ -137,21 +118,6 @@ const Communications: React.FC = () => {
             <div className="flex space-x-4">
               <div>
                 <select
-                  value={selectedCustomerId}
-                  onChange={(e) => setSelectedCustomerId(e.target.value)}
-                  className="block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
-                >
-                  <option value="all">All Customers</option>
-                  {customers.map(customer => (
-                    <option key={customer.id} value={customer.id}>
-                      {customer.firstname} {customer.lastname}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              
-              <div>
-                <select
                   value={communicationType}
                   onChange={(e) => setCommunicationType(e.target.value as any)}
                   className="block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
@@ -162,77 +128,229 @@ const Communications: React.FC = () => {
                   <option value="whatsapp">WhatsApp</option>
                 </select>
               </div>
+              
+              <div>
+                <select
+                  value={communicationStatus}
+                  onChange={(e) => setCommunicationStatus(e.target.value as any)}
+                  className="block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
+                >
+                  <option value="all">All Statuses</option>
+                  <option value="sent">Sent</option>
+                  <option value="archived">Archived</option>
+                  <option value="deleted">Deleted</option>
+                </select>
+              </div>
             </div>
           </div>
         </div>
         
-        {isLoading ? (
+        {loading ? (
           <div className="flex justify-center items-center h-64">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+          </div>
+        ) : error ? (
+          <div className="p-4 text-center text-red-500">
+            <p>Error loading communications: {error}</p>
           </div>
         ) : filteredCommunications.length === 0 ? (
           <div className="p-4 text-center text-gray-500">
             <p>No communications found.</p>
           </div>
         ) : (
-          <div className="divide-y divide-gray-200">
-            {filteredCommunications.map((comm) => (
-              <div key={comm.id} className="p-4 hover:bg-gray-50">
-                <div className="flex justify-between items-start">
-                  <div className="flex items-start">
-                    <div className="flex-shrink-0 mt-1">
-                      {getTypeIcon(comm.type)}
-                    </div>
-                    <div className="ml-3">
-                      <div className="flex items-center">
-                        <Link to={`/dashboard/customers/${comm.customerid}`} className="font-medium text-indigo-600 hover:text-indigo-900">
-                          {comm.customername}
-                        </Link>
-                        <span className="mx-2 text-gray-400">•</span>
-                        <span className="text-sm text-gray-500">
-                          {format(new Date(comm.sentat), 'MMM d, yyyy h:mm a')}
-                        </span>
-                        <span className="mx-2 text-gray-400">•</span>
-                        <span className="text-sm font-medium capitalize">
-                          {comm.type}
-                        </span>
+          <>
+            <div className="overflow-x-auto">
+              <div className="divide-y divide-gray-200">
+                {paginatedCommunications.map((comm: Communication) => (
+                  <div key={comm.id} className="p-4 hover:bg-gray-50">
+                    <div className="flex justify-between items-start">
+                      <div className="flex items-start">
+                        <div className="flex-shrink-0 mt-1">
+                          {getTypeIcon(comm.type)}
+                        </div>
+                        <div className="ml-3">
+                          <div className="flex items-center">
+                            <span className="font-medium capitalize">
+                              {comm.type}
+                            </span>
+                            <span className="mx-2 text-gray-400">•</span>
+                            <span className="text-sm text-gray-500">
+                              {format(new Date(comm.sentat), 'MMM d, yyyy h:mm a')}
+                            </span>
+                          </div>
+                          <p className="mt-1 text-gray-800 whitespace-pre-wrap line-clamp-2">
+                            {comm.content}
+                          </p>
+                        </div>
                       </div>
-                      <p className="mt-1 text-gray-800 whitespace-pre-wrap line-clamp-2">
-                        {comm.content}
-                      </p>
+                      <div className="flex items-center space-x-2">
+                        {comm.status === 'sent' && (
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                            Sent
+                          </span>
+                        )}
+                        {comm.status === 'delivered' && (
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                            Delivered
+                          </span>
+                        )}
+                        {comm.status === 'failed' && (
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                            Failed
+                          </span>
+                        )}
+                        {comm.status === 'received' && (
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                            Received
+                          </span>
+                        )}
+                        {comm.status === 'deleted' && (
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                            Deleted
+                          </span>
+                        )}
+                        <Link
+                          to={`/dashboard/communications/${comm.id}`}
+                          className="inline-flex items-center px-2.5 py-1.5 border border-gray-300 text-xs font-medium rounded text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                        >
+                          <Eye className="h-4 w-4 mr-1" />
+                          Details
+                        </Link>
+                        {comm.status !== 'deleted' && (
+                          <button
+                            onClick={() => openDeleteDialog(comm.id)}
+                            className="inline-flex items-center px-2.5 py-1.5 border border-red-300 text-xs font-medium rounded text-red-700 bg-white hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                          >
+                            <Trash2 className="h-4 w-4 mr-1" />
+                            Delete
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
-                  <div className="flex items-center">
-                    {comm.status === 'sent' && (
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                        Sent
-                      </span>
-                    )}
-                    {comm.status === 'delivered' && (
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                        Delivered
-                      </span>
-                    )}
-                    {comm.status === 'failed' && (
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                        Failed
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <div className="mt-2 flex justify-end">
-                  <Link
-                    to={`/dashboard/customers/${comm.customerid}/communicate`}
-                    className="text-sm text-indigo-600 hover:text-indigo-900"
+                ))}
+              </div>
+            </div>
+            
+            <div className="px-4 py-3 border-t border-gray-200 sm:px-6">
+              <div className="flex items-center justify-between">
+                <div className="flex-1 flex justify-between sm:hidden">
+                  <button
+                    onClick={() => setCurrentPage(page => Math.max(page - 1, 1))}
+                    disabled={currentPage === 1}
+                    className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
                   >
-                    Send new message
-                  </Link>
+                    Previous
+                  </button>
+                  <button
+                    onClick={() => setCurrentPage(page => Math.min(page + 1, totalPages))}
+                    disabled={currentPage === totalPages}
+                    className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    Next
+                  </button>
+                </div>
+                <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-sm text-gray-700">
+                      Showing{' '}
+                      <span className="font-medium">{startIndex + 1}</span>
+                      {' '}-{' '}
+                      <span className="font-medium">
+                        {Math.min(startIndex + rowsPerPage, filteredCommunications.length)}
+                      </span>
+                      {' '}of{' '}
+                      <span className="font-medium">{filteredCommunications.length}</span>
+                      {' '}results
+                    </p>
+                  </div>
+                  <div>
+                    <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
+                      <button
+                        onClick={() => setCurrentPage(page => Math.max(page - 1, 1))}
+                        disabled={currentPage === 1}
+                        className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
+                      >
+                        <span className="sr-only">Previous</span>
+                        <svg className="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                          <path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" />
+                        </svg>
+                      </button>
+                      {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                        <button
+                          key={page}
+                          onClick={() => setCurrentPage(page)}
+                          className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${
+                            page === currentPage
+                              ? 'z-10 bg-indigo-50 border-indigo-500 text-indigo-600'
+                              : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'
+                          }`}
+                        >
+                          {page}
+                        </button>
+                      ))}
+                      <button
+                        onClick={() => setCurrentPage(page => Math.min(page + 1, totalPages))}
+                        disabled={currentPage === totalPages}
+                        className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
+                      >
+                        <span className="sr-only">Next</span>
+                        <svg className="h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                          <path fillRule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clipRule="evenodd" />
+                        </svg>
+                      </button>
+                    </nav>
+                  </div>
                 </div>
               </div>
-            ))}
-          </div>
+            </div>
+          </>
         )}
       </div>
+
+      {isDeleteDialogOpen && (
+        <div className="fixed z-10 inset-0 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+          <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+            <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" aria-hidden="true"></div>
+
+            <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+
+            <div className="inline-block align-bottom bg-white rounded-lg px-4 pt-5 pb-4 text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full sm:p-6">
+              <div className="sm:flex sm:items-start">
+                <div className="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-red-100 sm:mx-0 sm:h-10 sm:w-10">
+                  <AlertCircle className="h-6 w-6 text-red-600" aria-hidden="true" />
+                </div>
+                <div className="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left">
+                  <h3 className="text-lg leading-6 font-medium text-gray-900" id="modal-title">
+                    Delete Communication
+                  </h3>
+                  <div className="mt-2">
+                    <p className="text-sm text-gray-500">
+                      Are you sure you want to delete this communication? This action will move it to the trash and can be undone from there.
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <div className="mt-5 sm:mt-4 sm:flex sm:flex-row-reverse">
+                <button
+                  type="button"
+                  className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-600 text-base font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 sm:ml-3 sm:w-auto sm:text-sm"
+                  onClick={handleDelete}
+                >
+                  Delete
+                </button>
+                <button
+                  type="button"
+                  className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:mt-0 sm:w-auto sm:text-sm"
+                  onClick={closeDeleteDialog}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

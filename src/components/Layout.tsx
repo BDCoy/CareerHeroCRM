@@ -8,6 +8,7 @@ import CustomerDetail from "../pages/CustomerDetail";
 import CustomerCommunication from "../pages/CustomerCommunication";
 import EmailCenter from "../pages/EmailCenter";
 import Communications from "../pages/Communications";
+import CommunicationDetails from "../pages/CommunicationDetails";
 import EmailParser from "../pages/EmailParser";
 import Dashboard from "../pages/Dashboard";
 import Settings from "../pages/Settings";
@@ -76,7 +77,7 @@ const Layout: React.FC = () => {
   }
 
   return (
-    <div className="flex min-h-screen ">
+    <div className="flex min-h-screen">
       <Sidebar />
       <main
         className={`flex-1 p-6 transition-all duration-300 ${
@@ -85,7 +86,6 @@ const Layout: React.FC = () => {
       >
         <Routes>
           {/* Dashboard routes */}
-
           <Route path="/" element={<CustomerList />} />
           <Route path="/customers/new" element={<CustomerForm />} />
           <Route path="/customers/:id" element={<CustomerDetail />} />
@@ -96,6 +96,7 @@ const Layout: React.FC = () => {
           />
           <Route path="/customers/:id/email" element={<EmailCenter />} />
           <Route path="/communications" element={<Communications />} />
+          <Route path="/communications/:id" element={<CommunicationDetails />} />
           <Route path="/email" element={<EmailCenter />} />
           <Route path="/email/parser" element={<EmailParser />} />
           <Route path="/analytics" element={<Dashboard />} />

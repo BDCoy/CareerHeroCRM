@@ -10,34 +10,119 @@ import {
   Plus,
   FileText,
   Settings as SettingsIcon,
+  Eye,
+  AlertCircle,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { useCustomerStore } from "../store/customerStore";
+import { useCommunicationStore } from "../store/communicationStore";
 import EmailInbox from "../components/EmailInbox";
 import EmailComposer from "../components/EmailComposer";
 import EmailDebugger from "../components/EmailDebugger";
 import { sendEmail } from "../lib/api";
 import { Communication } from "../types";
+import { format } from "date-fns";
 import toast from "react-hot-toast";
+
+const ITEMS_PER_PAGE = 10;
 
 const EmailCenter: React.FC = () => {
   const { id } = useParams<{ id: string }>();
-  const { customers, selectedCustomer, fetchCustomers, fetchCustomer } =
-    useCustomerStore();
+  const { selectedCustomer, fetchCustomer } = useCustomerStore();
+  const { fetchCommunicationsByStatus, softDeleteCommunication } = useCommunicationStore();
+  
   const [activeTab, setActiveTab] = useState<
     "inbox" | "compose" | "sent" | "archived" | "trash" | "debug"
   >("inbox");
   const [isComposing, setIsComposing] = useState(false);
-  const [replyToEmail, setReplyToEmail] = useState<Communication | undefined>(
-    undefined
-  );
+  const [replyToEmail, setReplyToEmail] = useState<Communication | undefined>(undefined);
   const [isSending, setIsSending] = useState(false);
+  const [communications, setCommunications] = useState<Communication[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  
+  // Delete dialog state
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [communicationToDelete, setCommunicationToDelete] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchCustomers();
     if (id) {
       fetchCustomer(id);
     }
-  }, [id, fetchCustomers, fetchCustomer]);
+    loadCommunications();
+  }, [id, fetchCustomer, activeTab]);
+
+  const loadCommunications = async () => {
+    setLoading(true);
+    try {
+      let status = '';
+      switch (activeTab) {
+        case 'sent':
+          status = 'sent';
+          break;
+        case 'archived':
+          status = 'archived';
+          break;
+        case 'trash':
+          status = 'deleted';
+          break;
+        default:
+          status = 'received';
+      }
+      
+      const data = await fetchCommunicationsByStatus(status);
+      setCommunications(data);
+      setCurrentPage(1);
+    } catch (error) {
+      console.error('Error loading communications:', error);
+      toast.error('Failed to load communications');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const openDeleteDialog = (commId: string) => {
+    setCommunicationToDelete(commId);
+    setIsDeleteDialogOpen(true);
+  };
+
+  const closeDeleteDialog = () => {
+    setCommunicationToDelete(null);
+    setIsDeleteDialogOpen(false);
+  };
+
+  const handleDelete = async () => {
+    if (!communicationToDelete) return;
+
+    try {
+      await softDeleteCommunication(communicationToDelete);
+      await loadCommunications();
+      toast.success('Communication moved to trash');
+      closeDeleteDialog();
+    } catch (error) {
+      console.error('Error deleting communication:', error);
+      toast.error('Failed to delete communication');
+    }
+  };
+
+    // Helper function to convert File to base64
+  const convertFileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (typeof reader.result === "string") {
+          resolve(reader.result);
+        } else {
+          reject(new Error("Failed to convert file to base64"));
+        }
+      };
+      reader.onerror = () => {
+        reject(reader.error);
+      };
+      reader.readAsDataURL(file);
+    });
+  };
 
   const handleSendEmail = async (
     to: string,
@@ -87,41 +172,147 @@ const EmailCenter: React.FC = () => {
     }
   };
 
-  const handleReply = (email: Communication) => {
-    setReplyToEmail(email);
-    setIsComposing(true);
+  const totalPages = Math.ceil(communications.length / ITEMS_PER_PAGE);
+  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+  const endIndex = startIndex + ITEMS_PER_PAGE;
+  const paginatedCommunications = communications.slice(startIndex, endIndex);
+
+  const renderPagination = () => {
+    if (communications.length <= ITEMS_PER_PAGE) return null;
+
+    return (
+      <div className="px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6">
+        <div className="flex-1 flex justify-between sm:hidden">
+          <button
+            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+            disabled={currentPage === 1}
+            className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
+          >
+            Previous
+          </button>
+          <button
+            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+            disabled={currentPage === totalPages}
+            className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
+          >
+            Next
+          </button>
+        </div>
+        <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm text-gray-700">
+              Showing <span className="font-medium">{startIndex + 1}</span> to{" "}
+              <span className="font-medium">
+                {Math.min(endIndex, communications.length)}
+              </span>{" "}
+              of <span className="font-medium">{communications.length}</span> results
+            </p>
+          </div>
+          <div>
+            <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
+              <button
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
+              >
+                <span className="sr-only">Previous</span>
+                <ChevronLeft className="h-5 w-5" />
+              </button>
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+                <button
+                  key={page}
+                  onClick={() => setCurrentPage(page)}
+                  className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${
+                    page === currentPage
+                      ? 'z-10 bg-indigo-50 border-indigo-500 text-indigo-600'
+                      : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'
+                  }`}
+                >
+                  {page}
+                </button>
+              ))}
+              <button
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
+              >
+                <span className="sr-only">Next</span>
+                <ChevronRight className="h-5 w-5" />
+              </button>
+            </nav>
+          </div>
+        </div>
+      </div>
+    );
   };
 
-  const getCustomerName = () => {
-    if (id && selectedCustomer) {
-      return `${selectedCustomer.firstname} ${selectedCustomer.lastname}`;
+  const renderCommunicationsList = () => {
+    if (loading) {
+      return (
+        <div className="flex justify-center items-center h-64">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+        </div>
+      );
     }
-    return "";
-  };
 
-  const getCustomerEmail = () => {
-    if (id && selectedCustomer) {
-      return selectedCustomer.email;
+    if (communications.length === 0) {
+      return (
+        <div className="text-center py-12">
+          <Mail className="mx-auto h-12 w-12 text-gray-400" />
+          <h3 className="mt-2 text-sm font-medium text-gray-900">
+            No {activeTab} messages
+          </h3>
+        </div>
+      );
     }
-    return "";
-  };
 
-  // Helper function to convert File to base64
-  const convertFileToBase64 = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        if (typeof reader.result === "string") {
-          resolve(reader.result);
-        } else {
-          reject(new Error("Failed to convert file to base64"));
-        }
-      };
-      reader.onerror = () => {
-        reject(reader.error);
-      };
-      reader.readAsDataURL(file);
-    });
+    return (
+      <>
+        <div className="divide-y divide-gray-200">
+          {paginatedCommunications.map((comm) => (
+            <div key={comm.id} className="p-4 hover:bg-gray-50">
+              <div className="flex justify-between items-start">
+                <div className="flex items-start">
+                  <Mail className="h-5 w-5 text-gray-400 mt-1" />
+                  <div className="ml-3">
+                    <div className="flex items-center">
+                      <span className="font-medium text-gray-900">
+                        {comm.metadata?.from || 'Unknown Sender'}
+                      </span>
+                      <span className="mx-2 text-gray-400">•</span>
+                      <span className="text-sm text-gray-500">
+                        {format(new Date(comm.sentat), 'MMM d, yyyy h:mm a')}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-sm text-gray-900">
+                      {comm.content}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex space-x-2">
+                  <Link
+                    to={`/dashboard/communications/${comm.id}`}
+                    className="text-gray-400 hover:text-gray-500"
+                  >
+                    <Eye className="h-5 w-5" />
+                  </Link>
+                  {/* Only show delete button if not in trash tab */}
+                  {activeTab !== 'trash' && (
+                    <button
+                      onClick={() => openDeleteDialog(comm.id)}
+                      className="text-red-400 hover:text-red-500"
+                    >
+                      <Trash2 className="h-5 w-5" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+        {renderPagination()}
+      </>
+    );
   };
 
   return (
@@ -141,12 +332,12 @@ const EmailCenter: React.FC = () => {
           <div>
             <h3 className="text-lg leading-6 font-medium text-gray-900">
               {id
-                ? `Email Communication with ${getCustomerName()}`
+                ? `Email Communication with ${selectedCustomer?.firstname} ${selectedCustomer?.lastname}`
                 : "Email Center"}
             </h3>
             <p className="mt-1 max-w-2xl text-sm text-gray-500">
               {id
-                ? `Manage all email communications with ${getCustomerName()}`
+                ? `Manage all email communications with ${selectedCustomer?.firstname} ${selectedCustomer?.lastname}`
                 : "Manage all email communications"}
             </p>
           </div>
@@ -187,15 +378,14 @@ const EmailCenter: React.FC = () => {
               {replyToEmail ? "Reply to Email" : "Compose New Email"}
             </h4>
             <EmailComposer
-              customerEmail={replyToEmail?.metadata?.from || getCustomerEmail()}
-              customerName={getCustomerName()}
+              customerEmail={replyToEmail?.metadata?.from || selectedCustomer?.email || ''}
+              customerName={selectedCustomer ? `${selectedCustomer.firstname} ${selectedCustomer.lastname}` : ''}
               onSendEmail={handleSendEmail}
               replyToEmail={replyToEmail}
               onCancel={() => {
                 setIsComposing(false);
                 setReplyToEmail(undefined);
               }}
-              isSending={isSending}
             />
           </div>
         ) : (
@@ -232,7 +422,7 @@ const EmailCenter: React.FC = () => {
 
                 <button
                   onClick={() => setActiveTab("archived")}
-                  className={`py-4 px-6 text-center border-b-2  font-medium text-sm ${
+                  className={`py-4 px-6 text-center border-b-2 font-medium text-sm ${
                     activeTab === "archived"
                       ? "border-indigo-500 text-indigo-600"
                       : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
@@ -275,51 +465,59 @@ const EmailCenter: React.FC = () => {
             </div>
 
             <div className="p-6">
-              {activeTab === "inbox" && (
-                <EmailInbox customerId={id} onReply={handleReply} />
+              {activeTab === "debug" ? (
+                <EmailDebugger customerId={id} />
+              ) : (
+                renderCommunicationsList()
               )}
-
-              {activeTab === "sent" && (
-                <div className="text-center py-12">
-                  <Mail className="mx-auto h-12 w-12 text-gray-400" />
-                  <h3 className="mt-2 text-sm font-medium text-gray-900">
-                    Sent emails
-                  </h3>
-                  <p className="mt-1 text-sm text-gray-500">
-                    View all emails you've sent to customers.
-                  </p>
-                </div>
-              )}
-
-              {activeTab === "archived" && (
-                <div className="text-center py-12">
-                  <Archive className="mx-auto h-12 w-12 text-gray-400" />
-                  <h3 className="mt-2 text-sm font-medium text-gray-900">
-                    Archived emails
-                  </h3>
-                  <p className="mt-1 text-sm text-gray-500">
-                    View all archived emails.
-                  </p>
-                </div>
-              )}
-
-              {activeTab === "trash" && (
-                <div className="text-center py-12">
-                  <Trash2 className="mx-auto h-12 w-12 text-gray-400" />
-                  <h3 className="mt-2 text-sm font-medium text-gray-900">
-                    Trash
-                  </h3>
-                  <p className="mt-1 text-sm text-gray-500">
-                    View deleted emails.
-                  </p>
-                </div>
-              )}
-
-              {activeTab === "debug" && <EmailDebugger customerId={id} />}
             </div>
           </>
         )}
       </div>
+
+      {isDeleteDialogOpen && (
+        <div className="fixed z-10 inset-0 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+          <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+            <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" aria-hidden="true"></div>
+
+            <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+
+            <div className="inline-block align-bottom bg-white rounded-lg px-4 pt-5 pb-4 text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full sm:p-6">
+              <div className="sm:flex sm:items-start">
+                <div className="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-red-100 sm:mx-0 sm:h-10 sm:w-10">
+                  <AlertCircle className="h-6 w-6 text-red-600" aria-hidden="true" />
+                </div>
+                <div className="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left">
+                  <h3 className="text-lg leading-6 font-medium text-gray-900" id="modal-title">
+                    Delete Communication
+                  </h3>
+                  <div className="mt-2">
+                    <p className="text-sm text-gray-500">
+                      Are you sure you want to delete this communication? This action will move it to the trash and can be undone from there.
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <div className="mt-5 sm:mt-4 sm:flex sm:flex-row-reverse">
+                <button
+                  type="button"
+                  className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-600 text-base font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 sm:ml-3 sm:w-auto sm:text-sm"
+                  onClick={handleDelete}
+                >
+                  Delete
+                </button>
+                <button
+                  type="button"
+                  className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:mt-0 sm:w-auto sm:text-sm"
+                  onClick={closeDeleteDialog}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
