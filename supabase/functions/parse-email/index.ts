@@ -2,6 +2,45 @@ import { serve } from "https://deno.land/std@0.140.0/http/server.ts";
 import { multiParser } from "https://deno.land/x/multiparser@0.114.0/mod.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import pdf from "npm:pdf-parse/lib/pdf-parse.js";
+import mammoth from "npm:mammoth";
+
+interface MultiPartFile {
+  name: string;
+  filename: string;
+  contentType: string;
+  size: number;
+  content: Uint8Array;
+}
+
+/**
+ * Describes the shape of form.fields returned by multiParser.
+ * Each property is optional because the webhook may or may not include it.
+ * We also include an index signature so new/unknown fields won't cause errors.
+ */
+export interface MultiParserFormFields {
+  headers?: string;
+  sender_ip?: string;
+  from?: string;
+  text?: string;
+  attachments?: string;
+  charsets?: string;
+  to?: string;
+  subject?: string;
+  dkim?: string;
+  spam_report?: string;
+  spam_score?: string;
+  "attachment-info"?: string;
+  "content-ids"?: string;
+  html?: string;
+  SPF?: string;
+  envelope?: string;
+  [key: string]: unknown;
+}
+
+interface MultiParserForm {
+  fields?: MultiParserFormFields;
+  files?: Record<string, MultiPartFile>;
+}
 
 // CORS Headers
 const corsHeaders = {
@@ -66,7 +105,7 @@ FORMAT RESPONSE AS JSON with these fields:
 - firstname
 - lastname
 - email (COMPLETE email address)
-- phone (COMPLETE phone number with country code)
+- phone (COMPLETE phone number with country code but without "+", no spaces example: 573117574197 like this)
 - skills (array)
 - experience (array of objects with: company, position, startDate, endDate, description)
 - education (array of objects with: institution, degree, field, graduationDate)
@@ -100,21 +139,20 @@ COMPLETENESS IS MANDATORY: Never truncate or abbreviate email addresses or phone
   }
 }
 
-function base64ToBlob(base64String: string, contentType: string): Blob {
-  const binaryString = atob(base64String);
-  const len = binaryString.length;
-  const bytes = new Uint8Array(len);
-  for (let i = 0; i < len; i++) {
-    bytes[i] = binaryString.charCodeAt(i);
-  }
-  return new Blob([bytes], { type: contentType });
-}
-
 async function extractTextFromPDF(pdfUrl: string) {
-  console.log(pdfUrl);
   const response = await fetch(pdfUrl);
   const data = await pdf(await response.arrayBuffer());
   return data.text;
+}
+
+async function extractTextFromDocx(docxFile: Uint8Array): Promise<string> {
+  try {
+    const result = await mammoth.extractRawText({ buffer: docxFile });
+    return result.value;
+  } catch (error) {
+    console.error("Error extracting text from DOCX:", error);
+    return "Failed to extract text from DOCX file.";
+  }
 }
 
 async function extractTextFromFile(
@@ -127,9 +165,14 @@ async function extractTextFromFile(
       return await extractTextFromPDF(fileUrl);
     } else if (contentType === "text/plain") {
       return new TextDecoder("utf-8").decode(file);
+    } else if (
+      contentType ===
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    ) {
+      return await extractTextFromDocx(file);
     } else {
       console.warn(`⚠️ Unsupported file type: ${contentType}`);
-      return `Unsupported file type: ${contentType}. Please upload a PDF or text file.`;
+      return `Unsupported file type: ${contentType}. Please upload a PDF, DOCX, or text file.`;
     }
   } catch (error) {
     console.error("❌ Error extracting text from file:", error);
@@ -145,10 +188,10 @@ serve(async (req) => {
 
   if (req.method === "POST") {
     try {
-      // Parse the multipart form data using multiParser
-      const form = await multiParser(req);
-      const { from: to, subject, text: body } = form.fields;
+      const rawForm = await multiParser(req);
 
+      const form = rawForm as MultiParserForm;
+      console.log(form.fields);
       if (!form) {
         return new Response("Invalid request", {
           status: 400,
@@ -156,113 +199,135 @@ serve(async (req) => {
         });
       }
 
-      // Extract the email content from form.fields.email
-      const emailContent = form.fields?.email;
+      const subject = form.fields?.subject || "";
 
-      if (!emailContent) {
-        return new Response("No email content found", {
-          status: 400,
-          headers: corsHeaders,
-        });
+      const body = form.fields?.text || "";
+
+      const envelopeStr = form.fields?.envelope || "";
+
+      let envelopeObj: { from?: string; to?: string[] } = {};
+      try {
+        envelopeObj = JSON.parse(envelopeStr);
+      } catch (err) {
+        console.warn("Could not parse envelope JSON:", err);
       }
+
+      const fromAddress = envelopeObj.from || form.fields?.from || "";
+      const toAddress = envelopeObj.to?.[0] || form.fields?.to || "";
+
+      console.log("Subject:", subject);
+      console.log("From:", fromAddress);
+      console.log("To:", toAddress);
+      console.log("Body:", body);
 
       const supabaseUrl = Deno.env.get("SUPABASE_URL");
       const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY");
       const openaiApiKey = Deno.env.get("OPENAI_API_KEY"); // OpenAI API Key
       const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
-      let resumeUrl = null;
-      let extractedInfo = {};
+      let resumeUrl: string | null = null;
+      let extractedInfo: Record<string, any> = {};
       let customerId = null;
 
-      // Parse the email content to find the attachments in base64
       const attachments: Array<{
         filename: string;
-        content: string; // Base64 encoded content
+        content: Uint8Array<ArrayBufferLike>;
         contentType: string;
       }> = [];
 
-      // Regex to extract attachment details
-      const attachmentRegex =
-        /Content-Type: ([^;]+); name="([^"]+)"\s+Content-Disposition: attachment; filename="([^"]+)"\s+Content-Transfer-Encoding: base64\s+Content-ID: <([^>]+)>\s+X-Attachment-Id: [^ \r\n]+([\s\S]+?)(?=--|$)/g;
-
-      let match;
-
-      while ((match = attachmentRegex.exec(emailContent)) !== null) {
-        const filename = match[2];
-        const contentType = match[1];
-        const base64Content = match[5].replace(/\n/g, "").trim(); // Clean the base64 string
-
-        // Add the attachment to the array
-        attachments.push({
-          filename,
-          content: base64Content,
-          contentType,
-        });
+      if (form.files) {
+        for (const [, fileObj] of Object.entries(form.files)) {
+          // Each fileObj will contain name, filename, contentType, size, and content (Uint8Array)
+          if (fileObj && fileObj.content && fileObj.filename) {
+            // Convert the Uint8Array to base64
+            attachments.push({
+              filename: fileObj.filename,
+              contentType: fileObj.contentType,
+              content: fileObj.content,
+            });
+          }
+        }
       }
-      console.log(attachments);
+
       if (attachments.length === 0) {
-        throw Error("No attachments founded");
+        // If you need attachments, you can decide how to handle the error
+        throw new Error("No attachments found");
       }
-      const resumeAttachments = attachments?.filter((att) =>
-        [".pdf", ".txt"].some((ext) => att.filename.toLowerCase().endsWith(ext))
+
+      // Only log filenames and content length to avoid huge logs
+      attachments.forEach((att) => {
+        console.log(
+          "Attachment:",
+          att.filename,
+          att.contentType,
+          att.content.length
+        );
+      });
+
+      const resumeExtensions = [".pdf", ".docx", ".txt"];
+      const resumeAttachments = attachments.filter((att) =>
+        resumeExtensions.some((ext) => att.filename.toLowerCase().endsWith(ext))
       );
-      console.log(resumeAttachments);
+
+      if (resumeAttachments.length === 0) {
+        // If you need attachments, you can decide how to handle the error
+        throw new Error("No supported attachments found");
+      }
+
+      // console.log(resumeAttachments);
       if (resumeAttachments?.length > 0) {
-        const attachment = resumeAttachments[0]; // Use the first valid resume
-        const fileName = `${Date.now()}-${attachment.filename}`;
-        const filePath = `resumes/${fileName}`;
+        for (const attachment of resumeAttachments) {
+          const fileName = `${Date.now()}-${attachment.filename}`;
+          const filePath = `resumes/${fileName}`;
 
-        // Extract Base64 data (remove "data:application/pdf;base64," prefix)
-        const base64Data = attachment.content.includes(",")
-          ? attachment.content.split(",")[1] // If it's a Data URI
-          : attachment.content;
-        // Convert Base64 to Blob
+          const fileBuffer = attachment.content;
 
-        const binaryString = atob(base64Data);
-        const fileBuffer = new Uint8Array(binaryString.length);
-        const fileBlob = base64ToBlob(base64Data, attachment.contentType);
-
-        // Upload file to Supabase Storage
-        const { error: uploadError } = await supabase.storage
-          .from("customer-files")
-          .upload(filePath, fileBlob, {
-            contentType: attachment.contentType,
-            upsert: true,
+          // Convert the raw Uint8Array into a Blob (Deno-friendly)
+          const fileBlob = new Blob([attachment.content], {
+            type: attachment.contentType,
           });
 
-        if (uploadError) throw uploadError;
+          const { error: uploadError } = await supabase.storage
+            .from("customer-files")
+            .upload(filePath, fileBlob, {
+              contentType: attachment.contentType,
+              upsert: true,
+            });
 
-        // Get public URL of uploaded file
-        const { data: urlData } = supabase.storage
-          .from("customer-files")
-          .getPublicUrl(filePath);
+          if (uploadError) throw uploadError;
 
-        resumeUrl = urlData.publicUrl;
+          const { data: urlData } = supabase.storage
+            .from("customer-files")
+            .getPublicUrl(filePath);
 
-        // Extract text for OpenAI processing
-        const resumeText = await extractTextFromFile(
-          fileBuffer,
-          attachment.contentType,
-          resumeUrl
-        );
-        console.log(resumeUrl, resumeText);
-        // Extract structured information using OpenAI
-        extractedInfo = await extractResumeInfo(resumeText, openaiApiKey);
+          resumeUrl = urlData.publicUrl;
 
-        if (!extractedInfo || Object.keys(extractedInfo).length === 0) {
-          console.error("❌ OpenAI did not return valid resume data.");
-          extractedInfo = {};
+          if (!resumeUrl) {
+            throw Error("Failed to upload file into storage");
+          }
+
+          const resumeText = await extractTextFromFile(
+            fileBuffer,
+            attachment.contentType,
+            resumeUrl
+          );
+
+          extractedInfo = await extractResumeInfo(resumeText, openaiApiKey);
+
+          if (!extractedInfo || Object.keys(extractedInfo).length === 0) {
+            console.error("❌ OpenAI did not return valid resume data.");
+            extractedInfo = {};
+          }
+
+          console.log("✅ Extracted Resume Data:", extractedInfo);
         }
-
-        console.log("✅ Extracted Resume Data:", extractedInfo);
       }
 
       // Check if customer exists
       const { data: existingCustomer, error: customerError } = await supabase
         .from("customers")
         .select("id, email")
-        .eq("email", extractedInfo?.email || to)
+        .eq("email", extractedInfo?.email || toAddress)
         .maybeSingle();
 
       if (customerError) throw customerError;
@@ -287,16 +352,16 @@ serve(async (req) => {
         const newCustomerData = {
           firstname:
             extractedInfo.firstname ||
-            to.split("@")[0].split(".")[0] ||
+            fromAddress.split("@")[0].split(".")[0] ||
             "Unknown",
           lastname:
             extractedInfo.lastname ||
-            to.split("@")[0].split(".")[1] ||
+            fromAddress.split("@")[0].split(".")[1] ||
             "Customer",
-          email: extractedInfo.email || to,
+          email: extractedInfo.email || fromAddress,
           phone: extractedInfo.phone || "",
           status: "lead",
-          source: `Email: ${subject}`,
+          source: `Email: ${fromAddress}`,
           notes: `Created from email attachment.\nSubject: ${subject}\nBody: ${body}`,
           resumeurl: resumeUrl,
           resumedata: extractedInfo,
