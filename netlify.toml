@@ -5,3 +5,16 @@
 
 [build.environment]
   NODE_VERSION = "20"
+
+# Handle all routes for SPA (Single Page Application)
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+  force = true
+
+# Handle 404s (optional since SPA routing should handle this)
+[[redirects]]
+  from = "/404"
+  to = "/index.html"
+  status = 200
