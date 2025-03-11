@@ -96,6 +96,7 @@ PHONE NUMBER EXTRACTION - CRITICAL REQUIREMENTS:
   * Portugal: +351 XXX XXX XXX or 9XX XXX XXX
   * UK: +44 XXXX XXXXXX or 0XXXX XXXXXX
   * International: +[country code] followed by digits
+- If the number doesn't appear to have a country code, determine which country code the country the text is based on.
 - Preserve any formatting like spaces or hyphens
 - If multiple phone numbers are present, select the most complete one with country code
 - NEVER truncate or omit any digits from the phone number

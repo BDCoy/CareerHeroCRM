@@ -1,13 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
-import { Send, Paperclip, X, FileText, Image, File } from "lucide-react";
-import {
-  EmailTemplate,
-  getEmailTemplates,
-  processTemplate,
-} from "../lib/emailService";
+import { Send, Paperclip, X, FileText, Image, File, BookTemplate as Templates } from "lucide-react";
+import { supabase } from "../lib/supabase";
 import { Communication } from "../types";
-import EmailTemplateSelector from "./EmailTemplateSelector";
+import { processTemplate } from "../lib/templateProcessor";
 
 interface EmailComposerProps {
   customerEmail: string;
@@ -32,6 +28,13 @@ interface EmailFormData {
   body: string;
 }
 
+interface Template {
+  id: string;
+  name: string;
+  content: string;
+  category: string;
+}
+
 const EmailComposer: React.FC<EmailComposerProps> = ({
   customerEmail,
   customerName,
@@ -42,16 +45,10 @@ const EmailComposer: React.FC<EmailComposerProps> = ({
   const [isSending, setIsSending] = useState(false);
   const [showCcBcc, setShowCcBcc] = useState(false);
   const [attachments, setAttachments] = useState<File[]>([]);
-  const [templates, setTemplates] = useState<
-    Array<{
-      id: string;
-      name: string;
-      subject: string;
-      body: string;
-      type: EmailTemplate;
-    }>
-  >([]);
+  const [templates, setTemplates] = useState<Template[]>([]);
   const [showTemplates, setShowTemplates] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
   const {
     register,
@@ -77,18 +74,22 @@ const EmailComposer: React.FC<EmailComposerProps> = ({
   const bodyValue = watch("body");
 
   useEffect(() => {
-    // Load email templates
-    const loadTemplates = async () => {
-      try {
-        const fetchedTemplates = await getEmailTemplates();
-        setTemplates(fetchedTemplates);
-      } catch (error) {
-        console.error("Error loading email templates:", error);
-      }
-    };
-
     loadTemplates();
   }, []);
+
+  const loadTemplates = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('templates')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setTemplates(data || []);
+    } catch (error) {
+      console.error('Error loading templates:', error);
+    }
+  };
 
   // Parse email content to get subject and body
   function parseEmailContent(content: string) {
@@ -151,35 +152,18 @@ const EmailComposer: React.FC<EmailComposerProps> = ({
     setAttachments((prev) => prev.filter((_, i) => i !== index));
   };
 
-  const applyTemplate = (template: any) => {
+  const handleTemplateSelect = (template: Template) => {
     // Process template with customer data
-    const processedSubject = processTemplate(template.subject, {
-      firstName: customerName.split(" ")[0],
-      lastName: customerName.split(" ").slice(1).join(" "),
-      projectName: "Your Project",
-      invoiceNumber: `INV-${Math.floor(Math.random() * 10000)}`,
-      date: new Date().toLocaleDateString(),
+    const processedSubject = processTemplate(template.name, {
+      firstname: customerName.split(" ")[0],
+      lastname: customerName.split(" ")[1] || "",
+      email: customerEmail,
     });
 
-    const processedBody = processTemplate(template.body, {
-      firstName: customerName.split(" ")[0],
-      lastName: customerName.split(" ").slice(1).join(" "),
-      projectName: "Your Project",
-      projectScope: "Full service package",
-      timeline: "4 weeks",
-      price: "$2,500",
-      invoiceNumber: `INV-${Math.floor(Math.random() * 10000)}`,
-      invoiceDate: new Date().toLocaleDateString(),
-      dueDate: new Date(
-        Date.now() + 14 * 24 * 60 * 60 * 1000
-      ).toLocaleDateString(),
-      amount: "$2,500",
-      bankDetails: "Bank: Example Bank, Account: 1234567890",
-      senderName: "Your Name",
-      nextStep1: "Schedule a follow-up call",
-      nextStep2: "Review the proposal",
-      nextStep3: "Make a decision by next week",
-      date: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toLocaleDateString(),
+    const processedBody = processTemplate(template.content, {
+      firstname: customerName.split(" ")[0],
+      lastname: customerName.split(" ")[1] || "",
+      email: customerEmail,
     });
 
     setValue("subject", processedSubject);
@@ -198,6 +182,17 @@ const EmailComposer: React.FC<EmailComposerProps> = ({
       return <File className="h-4 w-4 text-gray-500" />;
     }
   };
+
+  // Filter templates based on search and category
+  const filteredTemplates = templates.filter(template => {
+    const matchesSearch = template.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         template.content.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesCategory = !selectedCategory || template.category === selectedCategory;
+    return matchesSearch && matchesCategory;
+  });
+
+  // Get unique categories
+  const categories = Array.from(new Set(templates.map(t => t.category)));
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
@@ -353,7 +348,14 @@ const EmailComposer: React.FC<EmailComposerProps> = ({
             </label>
           </div>
 
-          <EmailTemplateSelector onSelectTemplate={applyTemplate} />
+          <button
+            type="button"
+            onClick={() => setShowTemplates(true)}
+            className="inline-flex items-center px-3 py-1.5 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+          >
+            <Templates className="h-4 w-4 mr-2" />
+            Templates
+          </button>
         </div>
 
         <div className="flex space-x-3">
@@ -377,6 +379,96 @@ const EmailComposer: React.FC<EmailComposerProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Template Selection Dialog */}
+      {showTemplates && (
+        <div className="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+          <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+            <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" aria-hidden="true"></div>
+
+            <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+
+            <div className="inline-block align-bottom bg-white rounded-lg px-4 pt-5 pb-4 text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full sm:p-6">
+              <div className="absolute top-0 right-0 pt-4 pr-4">
+                <button
+                  type="button"
+                  className="bg-white rounded-md text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                  onClick={() => setShowTemplates(false)}
+                >
+                  <span className="sr-only">Close</span>
+                  <X className="h-6 w-6" />
+                </button>
+              </div>
+
+              <div className="sm:flex sm:items-start">
+                <div className="mt-3 text-center sm:mt-0 sm:text-left w-full">
+                  <h3 className="text-lg leading-6 font-medium text-gray-900">
+                    Select Template
+                  </h3>
+
+                  <div className="mt-4">
+                    <input
+                      type="text"
+                      placeholder="Search templates..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                    />
+                  </div>
+
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedCategory(null)}
+                      className={`px-2 py-1 rounded text-sm ${
+                        !selectedCategory
+                          ? 'bg-indigo-100 text-indigo-800'
+                          : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
+                      }`}
+                    >
+                      All
+                    </button>
+                    {categories.map(category => (
+                      <button
+                        key={category}
+                        type="button"
+                        onClick={() => setSelectedCategory(category)}
+                        className={`px-2 py-1 rounded text-sm ${
+                          selectedCategory === category
+                            ? 'bg-indigo-100 text-indigo-800'
+                            : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
+                        }`}
+                      >
+                        {category}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="mt-4 max-h-96 overflow-y-auto">
+                    <div className="space-y-2">
+                      {filteredTemplates.map((template) => (
+                        <button
+                          key={template.id}
+                          type="button"
+                          onClick={() => handleTemplateSelect(template)}
+                          className="w-full text-left p-3 rounded hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                        >
+                          <h4 className="text-sm font-medium text-gray-900">
+                            {template.name}
+                          </h4>
+                          <p className="mt-1 text-sm text-gray-500 line-clamp-2">
+                            {template.content}
+                          </p>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </form>
   );
 };

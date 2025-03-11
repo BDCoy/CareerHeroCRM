@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { ArrowLeft, Send, Smile, RefreshCw, Image as ImageIcon, Mic, Video, File } from 'lucide-react';
 import { useCustomerStore } from '../store/customerStore';
@@ -9,6 +9,7 @@ import toast from 'react-hot-toast';
 import EmojiPicker from 'emoji-picker-react';
 import Zoom from 'react-medium-image-zoom';
 import 'react-medium-image-zoom/dist/styles.css';
+import { processTemplate } from '../lib/templateProcessor';
 
 const MessageMedia: React.FC<{ metadata: any }> = ({ metadata }) => {
   const { message_type, media_link, content } = metadata;
@@ -162,7 +163,11 @@ const CustomerCommunication: React.FC = () => {
   };
 
   const handleTemplateSelect = (template: any) => {
-    setMessage(template.content);
+    if (!selectedCustomer) return;
+    
+    // Process template with customer data
+    const processedContent = processTemplate(template.content, selectedCustomer);
+    setMessage(processedContent);
     setShowTemplates(false);
     setTemplateCategory(null);
   };

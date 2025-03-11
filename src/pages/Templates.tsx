@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, Edit, Trash2, AlertCircle, X } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, AlertCircle, X, Info } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 
@@ -25,6 +25,7 @@ const Templates: React.FC = () => {
     content: '',
     category: 'general'
   });
+  const [showVariableHelp, setShowVariableHelp] = useState(false);
   
   const templatesPerPage = 10;
   
@@ -147,6 +148,13 @@ const Templates: React.FC = () => {
     setEditingTemplate(null);
     setIsModalOpen(true);
   };
+
+  const insertVariable = (variable: string) => {
+    setFormData(prev => ({
+      ...prev,
+      content: prev.content + `{${variable}}`
+    }));
+  };
   
   return (
     <div>
@@ -232,59 +240,6 @@ const Templates: React.FC = () => {
             </table>
           </div>
         )}
-        
-        {totalPages > 1 && (
-          <div className="px-4 py-3 flex items-center justify-between border-t border-gray-200">
-            <div className="flex-1 flex justify-between sm:hidden">
-              <button
-                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                disabled={currentPage === 1}
-                className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
-              >
-                Previous
-              </button>
-              <button
-                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                disabled={currentPage === totalPages}
-                className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
-              >
-                Next
-              </button>
-            </div>
-            <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
-              <div>
-                <p className="text-sm text-gray-700">
-                  Showing{' '}
-                  <span className="font-medium">{(currentPage - 1) * templatesPerPage + 1}</span>
-                  {' '}-{' '}
-                  <span className="font-medium">
-                    {Math.min(currentPage * templatesPerPage, filteredTemplates.length)}
-                  </span>
-                  {' '}of{' '}
-                  <span className="font-medium">{filteredTemplates.length}</span>
-                  {' '}results
-                </p>
-              </div>
-              <div>
-                <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px">
-                  {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
-                    <button
-                      key={page}
-                      onClick={() => setCurrentPage(page)}
-                      className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${
-                        page === currentPage
-                          ? 'z-10 bg-indigo-50 border-indigo-500 text-indigo-600'
-                          : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'
-                      }`}
-                    >
-                      {page}
-                    </button>
-                  ))}
-                </nav>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
       
       {/* Modal for creating/editing templates */}
@@ -336,18 +291,50 @@ const Templates: React.FC = () => {
                         </div>
                         
                         <div>
-                          <label htmlFor="content" className="block text-sm font-medium text-gray-700">
-                            Content
-                          </label>
+                          <div className="flex justify-between items-center mb-1">
+                            <label htmlFor="content" className="block text-sm font-medium text-gray-700">
+                              Content
+                            </label>
+                            <button
+                              type="button"
+                              onClick={() => setShowVariableHelp(!showVariableHelp)}
+                              className="text-indigo-600 hover:text-indigo-900 text-sm flex items-center"
+                            >
+                              <Info className="h-4 w-4 mr-1" />
+                              Variables
+                            </button>
+                          </div>
+                          {showVariableHelp && (
+                            <div className="mb-2 p-3 bg-gray-50 rounded-md border border-gray-200">
+                              <h4 className="text-sm font-medium text-gray-700 mb-2">Available Variables:</h4>
+                              <div className="grid grid-cols-2 gap-2">
+                                {[
+                                  'firstname', 'lastname', 'email', 'phone',
+                                  'status', 'source', 'notes', 'createdat', 'updatedat'
+                                ].map(variable => (
+                                  <button
+                                    key={variable}
+                                    type="button"
+                                    onClick={() => insertVariable(variable)}
+                                    className="text-xs px-2 py-1 bg-white border border-gray-300 rounded hover:bg-gray-50 text-left"
+                                  >
+                                    {`{${variable}}`}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                           <textarea
                             id="content"
-                            rows={4}
+                            rows={6}
                             value={formData.content}
                             onChange={(e) => setFormData({ ...formData, content: e.target.value })}
-                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm font-mono"
                             required
                           />
-                     
+                          <p className="mt-1 text-xs text-gray-500">
+                            Use {`{variable}`} syntax to insert customer data. Click "Variables" to see available options.
+                          </p>
                         </div>
                       </div>
                     </div>

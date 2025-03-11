@@ -1,17 +1,16 @@
 import React, { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { Search, UserPlus, Edit, Trash2, Filter, Mail, MessageSquare, CheckSquare, Square, X, Send, AlertCircle } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Search, UserPlus, Edit, Trash2, Filter, Mail, MessageSquare, AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useCustomerStore } from '../store/customerStore';
 import { Customer } from '../types';
 
+const ITEMS_PER_PAGE = 10;
+
 const CustomerList: React.FC = () => {
-  const navigate = useNavigate();
   const { customers, loading, error, fetchCustomers, removeCustomer } = useCustomerStore();
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
-  const [selectedCustomers, setSelectedCustomers] = useState<string[]>([]);
-  const [bulkMode, setBulkMode] = useState(false);
-  const [bulkAction, setBulkAction] = useState<'email' | 'whatsapp' | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
   
   useEffect(() => {
     fetchCustomers();
@@ -38,6 +37,12 @@ const CustomerList: React.FC = () => {
     return matchesSearch && matchesStatus;
   });
 
+  // Calculate pagination
+  const totalPages = Math.ceil(filteredCustomers.length / ITEMS_PER_PAGE);
+  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+  const endIndex = startIndex + ITEMS_PER_PAGE;
+  const paginatedCustomers = filteredCustomers.slice(startIndex, endIndex);
+
   // Get status badge color
   const getStatusColor = (status: string) => {
     switch(status) {
@@ -48,95 +53,94 @@ const CustomerList: React.FC = () => {
     }
   };
 
-  // Toggle customer selection
-  const toggleCustomerSelection = (customerId: string) => {
-    setSelectedCustomers(prev => {
-      if (prev.includes(customerId)) {
-        return prev.filter(id => id !== customerId);
-      } else {
-        return [...prev, customerId];
-      }
-    });
-  };
+  const renderPagination = () => {
+    return (
+      <div className="px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6">
+        {/* Mobile view: previous/next buttons */}
+        <div className="flex-1 flex justify-between sm:hidden">
+          <button
+            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+            disabled={currentPage === 1}
+            className="relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
+          >
+            Previous
+          </button>
+          <button
+            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+            disabled={currentPage === totalPages}
+            className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50"
+          >
+            Next
+          </button>
+        </div>
 
-  // Toggle select all customers
-  const toggleSelectAll = () => {
-    if (selectedCustomers.length === filteredCustomers.length) {
-      setSelectedCustomers([]);
-    } else {
-      setSelectedCustomers(filteredCustomers.map(customer => customer.id));
-    }
-  };
+        {/* Desktop view: Page information and pagination buttons */}
+        <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm text-gray-700">
+              Showing <span className="font-medium">{startIndex + 1}</span> to{' '}
+              <span className="font-medium">
+                {Math.min(endIndex, filteredCustomers.length)}
+              </span>{' '}
+              of <span className="font-medium">{filteredCustomers.length}</span> results
+            </p>
+          </div>
+          <div>
+            <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
+              {/* Previous button */}
+              <button
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
+              >
+                <span className="sr-only">Previous</span>
+                <ChevronLeft className="h-5 w-5" />
+              </button>
 
-  // Start bulk action
-  const startBulkAction = (action: 'email' | 'whatsapp') => {
-    setBulkAction(action);
-    
-    // Create a comma-separated list of customer IDs
-    const customerIds = selectedCustomers.join(',');
-    
-    // Navigate to the bulk communication page with the selected customers and action
-    navigate(`/bulk-communication?customers=${customerIds}&action=${action}`);
-  };
+              {/* Page number buttons */}
+              {Array.from({ length: totalPages }, (_, i) => i + 1)
+                .slice(Math.max(currentPage - 2, 0), currentPage + 1)
+                .map(page => (
+                  <button
+                    key={page}
+                    onClick={() => setCurrentPage(page)}
+                    className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${
+                      page === currentPage
+                        ? 'z-10 bg-indigo-50 border-indigo-500 text-indigo-600'
+                        : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'
+                    }`}
+                  >
+                    {page}
+                  </button>
+                ))}
 
-  // Cancel bulk mode
-  const cancelBulkMode = () => {
-    setBulkMode(false);
-    setSelectedCustomers([]);
+              {/* Next button */}
+              <button
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
+              >
+                <span className="sr-only">Next</span>
+                <ChevronRight className="h-5 w-5" />
+              </button>
+            </nav>
+          </div>
+        </div>
+      </div>
+    );
   };
   
   return (
     <div>
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-6 gap-4">
         <h1 className="text-2xl font-bold text-gray-900">Customers</h1>
-        <div className="flex flex-wrap gap-2">
-          {bulkMode ? (
-            <>
-              <button
-                onClick={() => startBulkAction('email')}
-                disabled={selectedCustomers.length === 0}
-                className="inline-flex items-center justify-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
-              >
-                <Mail className="h-4 w-4 mr-2" />
-                Bulk Email ({selectedCustomers.length})
-              </button>
-              <button
-                onClick={() => startBulkAction('whatsapp')}
-                disabled={selectedCustomers.length === 0}
-                className="inline-flex items-center justify-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
-                </svg>
-                Bulk WhatsApp ({selectedCustomers.length})
-              </button>
-              <button
-                onClick={cancelBulkMode}
-                className="inline-flex items-center justify-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-              >
-                <X className="h-4 w-4 mr-2" />
-                Cancel
-              </button>
-            </>
-          ) : (
-            <>
-              <button
-                onClick={() => setBulkMode(true)}
-                className="inline-flex items-center justify-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-              >
-                <CheckSquare className="h-4 w-4 mr-2" />
-                Bulk Actions
-              </button>
-              <Link
-                to="/dashboard/customers/new"
-                className="inline-flex items-center justify-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 w-full sm:w-auto"
-              >
-                <UserPlus className="h-4 w-4 mr-2" />
-                Add Customer
-              </Link>
-            </>
-          )}
-        </div>
+        <Link
+          to="/dashboard/customers/new"
+          className="inline-flex items-center justify-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 w-full sm:w-auto"
+        >
+          <UserPlus className="h-4 w-4 mr-2" />
+          Add Customer
+        </Link>
       </div>
       
       {error && (
@@ -158,8 +162,8 @@ const CustomerList: React.FC = () => {
       
       <div className="bg-white shadow rounded-lg overflow-hidden">
         <div className="p-4 border-b">
-          <div className="flex flex-col space-y-3">
-            <div className="relative">
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center space-y-3 sm:space-y-0">
+            <div className="relative flex-1 max-w-md">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                 <Search className="h-5 w-5 text-gray-400" />
               </div>
@@ -168,12 +172,11 @@ const CustomerList: React.FC = () => {
                 placeholder="Search customers..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 block w-full sm:text-sm"
+                className="pl-10 pr-3 py-2 w-full border border-gray-300 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
               />
             </div>
             
-            <div className="flex items-center">
-              <Filter className="h-4 w-4 text-gray-500 mr-2" />
+            <div>
               <select
                 value={filterStatus}
                 onChange={(e) => setFilterStatus(e.target.value)}
@@ -207,23 +210,6 @@ const CustomerList: React.FC = () => {
             <table className="min-w-full divide-y divide-gray-200 hidden md:table">
               <thead className="bg-gray-50">
                 <tr>
-                  {bulkMode && (
-                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      <div className="flex items-center">
-                        <button 
-                          onClick={toggleSelectAll}
-                          className="focus:outline-none"
-                          aria-label={selectedCustomers.length === filteredCustomers.length ? "Deselect all" : "Select all"}
-                        >
-                          {selectedCustomers.length === filteredCustomers.length ? (
-                            <CheckSquare className="h-5 w-5 text-indigo-600" />
-                          ) : (
-                            <Square className="h-5 w-5 text-gray-400" />
-                          )}
-                        </button>
-                      </div>
-                    </th>
-                  )}
                   <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Name
                   </th>
@@ -242,25 +228,8 @@ const CustomerList: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {filteredCustomers.map((customer) => (
+                {paginatedCustomers.map((customer) => (
                   <tr key={customer.id} className="hover:bg-gray-50">
-                    {bulkMode && (
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center">
-                          <button 
-                            onClick={() => toggleCustomerSelection(customer.id)}
-                            className="focus:outline-none"
-                            aria-label={selectedCustomers.includes(customer.id) ? "Deselect" : "Select"}
-                          >
-                            {selectedCustomers.includes(customer.id) ? (
-                              <CheckSquare className="h-5 w-5 text-indigo-600" />
-                            ) : (
-                              <Square className="h-5 w-5 text-gray-400" />
-                            )}
-                          </button>
-                        </div>
-                      </td>
-                    )}
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
                         <div className="flex-shrink-0 h-10 w-10 bg-indigo-100 rounded-full flex items-center justify-center">
@@ -352,22 +321,9 @@ const CustomerList: React.FC = () => {
             
             {/* Mobile view */}
             <div className="md:hidden divide-y divide-gray-200">
-              {filteredCustomers.map((customer) => (
+              {paginatedCustomers.map((customer) => (
                 <div key={customer.id} className="p-4 hover:bg-gray-50">
                   <div className="flex items-center mb-2">
-                    {bulkMode && (
-                      <button 
-                        onClick={() => toggleCustomerSelection(customer.id)}
-                        className="mr-3 focus:outline-none"
-                        aria-label={selectedCustomers.includes(customer.id) ? "Deselect" : "Select"}
-                      >
-                        {selectedCustomers.includes(customer.id) ? (
-                          <CheckSquare className="h-6 w-6 text-indigo-600" />
-                        ) : (
-                          <Square className="h-6 w-6 text-gray-400" />
-                        )}
-                      </button>
-                    )}
                     <div className="h-12 w-12 bg-indigo-100 rounded-full flex items-center justify-center">
                       <span className="text-indigo-800 font-medium text-lg">
                         {customer.firstname.charAt(0)}{customer.lastname.charAt(0)}
@@ -392,7 +348,7 @@ const CustomerList: React.FC = () => {
                     </div>
                   </div>
                   
-                  <div className={`${bulkMode ? 'ml-11' : 'ml-14'} mb-3`}>
+                  <div className="ml-14 mb-3">
                     <div className="flex items-center text-sm text-gray-900 mb-1">
                       <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-gray-500 mr-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path>
@@ -435,7 +391,7 @@ const CustomerList: React.FC = () => {
                         className="flex-1 flex items-center justify-center p-2 text-green-600 hover:bg-green-50 rounded-md"
                       >
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1" viewBox="0 0 24 24" fill="currentColor">
-                          <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48- 1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+                          <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
                         </svg>
                         <span className="text-xs">WhatsApp</span>
                       </Link>
@@ -461,6 +417,7 @@ const CustomerList: React.FC = () => {
             </div>
           </div>
         )}
+        {renderPagination()}
       </div>
     </div>
   );

@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { persist, createJSONStorage } from 'zustand/middleware';
 import { Customer } from '../types';
 import { getCustomers, getCustomer, createCustomer, updateCustomer, deleteCustomer } from '../lib/api';
 
@@ -17,6 +17,69 @@ interface CustomerState {
   clearError: () => void;
 }
 
+// Custom storage that implements size limits and data cleanup
+const createCustomStorage = () => {
+  const storage = createJSONStorage(() => localStorage);
+  
+  return {
+    ...storage,
+    setItem: (key: string, value: string) => {
+      try {
+        // Clean up customer data before storing
+        const data = JSON.parse(value);
+        if (data.state && Array.isArray(data.state.customers)) {
+          // Only store essential customer data
+          data.state.customers = data.state.customers.map((customer: Customer) => ({
+            id: customer.id,
+            firstname: customer.firstname,
+            lastname: customer.lastname,
+            email: customer.email,
+            phone: customer.phone,
+            status: customer.status,
+            createdat: customer.createdat,
+            updatedat: customer.updatedat
+          }));
+          
+          // Limit the number of stored customers
+          data.state.customers = data.state.customers.slice(0, 100);
+          
+          // Remove selectedCustomer from storage
+          data.state.selectedCustomer = null;
+        }
+        
+        // Try to store the cleaned data
+        const cleanedValue = JSON.stringify(data);
+        try {
+          localStorage.setItem(key, cleanedValue);
+        } catch (storageError) {
+          // If still exceeding quota, remove more data
+          if (storageError.name === 'QuotaExceededError') {
+            data.state.customers = data.state.customers.slice(0, 50);
+            localStorage.setItem(key, JSON.stringify(data));
+          } else {
+            throw storageError;
+          }
+        }
+      } catch (error) {
+        console.error('Error storing customer data:', error);
+        // If all else fails, clear storage and store minimal data
+        localStorage.clear();
+        const minimalData = {
+          state: {
+            customers: [],
+            selectedCustomer: null,
+            loading: false,
+            error: null
+          }
+        };
+        localStorage.setItem(key, JSON.stringify(minimalData));
+      }
+    },
+    getItem: storage.getItem,
+    removeItem: storage.removeItem
+  };
+};
+
 export const useCustomerStore = create<CustomerState>()(
   persist(
     (set, get) => ({
@@ -30,15 +93,13 @@ export const useCustomerStore = create<CustomerState>()(
       fetchCustomers: async () => {
         set({ loading: true, error: null });
         try {
-          // First try to get customers from the API
           const customers = await getCustomers();
           set({ customers, loading: false });
         } catch (error) {
           console.error('Error fetching customers:', error);
           
-          // If we have customers in the store already, keep them
           if (get().customers.length === 0) {
-            // If no customers in store, create some mock data for demo purposes
+            // Create mock data only if no customers exist
             const mockCustomers: Customer[] = [
               {
                 id: '642620a2-d533-4091-84ad-fbc95b96a85e',
@@ -63,18 +124,6 @@ export const useCustomerStore = create<CustomerState>()(
                 notes: 'Contacted us about the basic plan',
                 createdat: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
                 updatedat: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
-              },
-              {
-                id: 'a1b2c3d4-e5f6-4a5b-9c8d-7e6f5a4b3c2',
-                firstname: 'Michael',
-                lastname: 'Johnson',
-                email: 'michael.johnson@example.com',
-                phone: '+1 (555) 456-7890',
-                status: 'prospect',
-                source: 'LinkedIn',
-                notes: 'Had a demo call on March 15',
-                createdat: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString(),
-                updatedat: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString()
               }
             ];
             
@@ -95,7 +144,6 @@ export const useCustomerStore = create<CustomerState>()(
       fetchCustomer: async (id: string) => {
         set({ loading: true, error: null });
         try {
-          // First check if we already have this customer in the store
           const existingCustomer = get().customers.find(c => c.id === id);
           
           if (existingCustomer) {
@@ -103,7 +151,6 @@ export const useCustomerStore = create<CustomerState>()(
             return;
           }
           
-          // If not, fetch from API
           try {
             const customer = await getCustomer(id);
             if (customer) {
@@ -114,7 +161,6 @@ export const useCustomerStore = create<CustomerState>()(
           } catch (apiError) {
             console.error('Error fetching customer from API:', apiError);
             
-            // If we're in demo mode, create a mock customer
             if (get().error && get().error.includes('demo data')) {
               const mockCustomer: Customer = {
                 id,
@@ -124,7 +170,7 @@ export const useCustomerStore = create<CustomerState>()(
                 phone: '+1 (555) 123-4567',
                 status: 'customer',
                 source: 'Demo',
-                notes: 'This is a demo customer created because the database connection failed.',
+                notes: 'This is a demo customer.',
                 createdat: new Date().toISOString(),
                 updatedat: new Date().toISOString()
               };
@@ -146,40 +192,12 @@ export const useCustomerStore = create<CustomerState>()(
       addCustomer: async (customer) => {
         set({ loading: true, error: null });
         try {
-          // Try to create the customer via API
-          try {
-            const newCustomer = await createCustomer(customer);
-            
-            // Update the customers list with the new customer
-            set(state => ({ 
-              customers: [newCustomer, ...state.customers],
-              loading: false 
-            }));
-            
-            return newCustomer;
-          } catch (apiError) {
-            console.error('Error adding customer via API:', apiError);
-            
-            // If we're in demo mode, create a mock customer
-            if (get().error && get().error.includes('demo data')) {
-              const mockCustomer: Customer = {
-                id: uuidv4(),
-                ...customer,
-                createdat: new Date().toISOString(),
-                updatedat: new Date().toISOString()
-              };
-              
-              // Update the customers list with the new mock customer
-              set(state => ({ 
-                customers: [mockCustomer, ...state.customers],
-                loading: false 
-              }));
-              
-              return mockCustomer;
-            } else {
-              throw apiError;
-            }
-          }
+          const newCustomer = await createCustomer(customer);
+          set(state => ({ 
+            customers: [newCustomer, ...state.customers],
+            loading: false 
+          }));
+          return newCustomer;
         } catch (error) {
           console.error('Error adding customer:', error);
           set({ 
@@ -193,44 +211,12 @@ export const useCustomerStore = create<CustomerState>()(
       editCustomer: async (id, updates) => {
         set({ loading: true, error: null });
         try {
-          // Try to update the customer via API
-          try {
-            const updatedCustomer = await updateCustomer(id, updates);
-            
-            // Update both the customers list and selectedCustomer if it's the same one
-            set(state => ({
-              customers: state.customers.map(c => c.id === id ? updatedCustomer : c),
-              selectedCustomer: state.selectedCustomer?.id === id ? updatedCustomer : state.selectedCustomer,
-              loading: false
-            }));
-          } catch (apiError) {
-            console.error('Error updating customer via API:', apiError);
-            
-            // If we're in demo mode, update the customer locally
-            if (get().error && get().error.includes('demo data')) {
-              // Find the customer in the store
-              const customer = get().customers.find(c => c.id === id);
-              
-              if (customer) {
-                const updatedCustomer: Customer = {
-                  ...customer,
-                  ...updates,
-                  updatedat: new Date().toISOString()
-                };
-                
-                // Update both the customers list and selectedCustomer if it's the same one
-                set(state => ({
-                  customers: state.customers.map(c => c.id === id ? updatedCustomer : c),
-                  selectedCustomer: state.selectedCustomer?.id === id ? updatedCustomer : state.selectedCustomer,
-                  loading: false
-                }));
-              } else {
-                throw new Error('Customer not found');
-              }
-            } else {
-              throw apiError;
-            }
-          }
+          const updatedCustomer = await updateCustomer(id, updates);
+          set(state => ({
+            customers: state.customers.map(c => c.id === id ? updatedCustomer : c),
+            selectedCustomer: state.selectedCustomer?.id === id ? updatedCustomer : state.selectedCustomer,
+            loading: false
+          }));
         } catch (error) {
           console.error('Error updating customer:', error);
           set({ 
@@ -243,31 +229,12 @@ export const useCustomerStore = create<CustomerState>()(
       removeCustomer: async (id) => {
         set({ loading: true, error: null });
         try {
-          // Try to delete the customer via API
-          try {
-            await deleteCustomer(id);
-            
-            // Remove the customer from the store
-            set(state => ({
-              customers: state.customers.filter(c => c.id !== id),
-              selectedCustomer: state.selectedCustomer?.id === id ? null : state.selectedCustomer,
-              loading: false
-            }));
-          } catch (apiError) {
-            console.error('Error removing customer via API:', apiError);
-            
-            // If we're in demo mode, remove the customer locally
-            if (get().error && get().error.includes('demo data')) {
-              // Remove the customer from the store
-              set(state => ({
-                customers: state.customers.filter(c => c.id !== id),
-                selectedCustomer: state.selectedCustomer?.id === id ? null : state.selectedCustomer,
-                loading: false
-              }));
-            } else {
-              throw apiError;
-            }
-          }
+          await deleteCustomer(id);
+          set(state => ({
+            customers: state.customers.filter(c => c.id !== id),
+            selectedCustomer: state.selectedCustomer?.id === id ? null : state.selectedCustomer,
+            loading: false
+          }));
         } catch (error) {
           console.error('Error removing customer:', error);
           set({ 
@@ -283,18 +250,19 @@ export const useCustomerStore = create<CustomerState>()(
     }),
     {
       name: 'customer-storage',
-      partialize: (state) => ({ 
-        customers: state.customers,
-        // Don't persist loading or error states
-      }),
+      storage: createCustomStorage(),
+      partialize: (state) => ({
+        customers: state.customers.map(customer => ({
+          id: customer.id,
+          firstname: customer.firstname,
+          lastname: customer.lastname,
+          email: customer.email,
+          phone: customer.phone,
+          status: customer.status,
+          createdat: customer.createdat,
+          updatedat: customer.updatedat
+        }))
+      })
     }
   )
 );
-
-// Helper function for generating UUIDs in demo mode
-function uuidv4() {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-    const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
-    return v.toString(16);
-  });
-}
