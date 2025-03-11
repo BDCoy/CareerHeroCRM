@@ -19,7 +19,7 @@ const CustomerDetail: React.FC = () => {
     if (window.confirm('Are you sure you want to delete this customer?')) {
       if (id) {
         await removeCustomer(id);
-        navigate('/');
+        navigate('/dashboard');
       }
     }
   };
@@ -38,7 +38,7 @@ const CustomerDetail: React.FC = () => {
         <h3 className="text-lg font-medium text-red-800">Error</h3>
         <p className="mt-2 text-sm text-red-700">{error}</p>
         <div className="mt-4">
-          <Link to="/" className="text-red-700 hover:text-red-600 font-medium">
+          <Link to="/dashboard" className="text-red-700 hover:text-red-600 font-medium">
             &larr; Back to customers
           </Link>
         </div>
@@ -51,7 +51,7 @@ const CustomerDetail: React.FC = () => {
       <div className="bg-yellow-50 p-4 rounded-md">
         <h3 className="text-lg font-medium text-yellow-800">Customer not found</h3>
         <div className="mt-4">
-          <Link to="/" className="text-yellow-700 hover:text-yellow-600 font-medium">
+          <Link to="/dashboard" className="text-yellow-700 hover:text-yellow-600 font-medium">
             &larr; Back to customers
           </Link>
         </div>
@@ -74,7 +74,7 @@ const CustomerDetail: React.FC = () => {
   return (
     <div>
       <div className="mb-6">
-        <Link to="/" className="inline-flex items-center text-indigo-600 hover:text-indigo-900">
+        <Link to="/dashboard" className="inline-flex items-center text-indigo-600 hover:text-indigo-900">
           <ArrowLeft className="h-4 w-4 mr-1" />
           Back to customers
         </Link>
@@ -116,16 +116,6 @@ const CustomerDetail: React.FC = () => {
                 Email
               </Link>
               
-              {/* SMS button */}
-              <Link
-                to={`/dashboard/customers/${id}/communicate?tab=sms`}
-                className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-white bg-purple-600 hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-                </svg>
-                SMS
-              </Link>
               
               {/* WhatsApp button */}
               <Link

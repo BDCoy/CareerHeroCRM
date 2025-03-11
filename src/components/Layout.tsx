@@ -11,7 +11,7 @@ import Communications from "../pages/Communications";
 import CommunicationDetails from "../pages/CommunicationDetails";
 import EmailParser from "../pages/EmailParser";
 import Dashboard from "../pages/Dashboard";
-import Settings from "../pages/Settings";
+import Templates from "../pages/Templates";
 import WebhookSettings from "../pages/WebhookSettings";
 import BulkCommunication from "../pages/BulkCommunication";
 import CustomerForm from "../pages/CustomerForm";
@@ -100,7 +100,7 @@ const Layout: React.FC = () => {
           <Route path="/email" element={<EmailCenter />} />
           <Route path="/email/parser" element={<EmailParser />} />
           <Route path="/analytics" element={<Dashboard />} />
-          <Route path="/settings" element={<Settings />} />
+          <Route path="/templates" element={<Templates />} />
           <Route path="/webhook-settings" element={<WebhookSettings />} />
           <Route path="/bulk-communication" element={<BulkCommunication />} />
         </Routes>

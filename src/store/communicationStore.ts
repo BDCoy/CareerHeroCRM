@@ -9,6 +9,7 @@ interface CommunicationState {
   loading: boolean;
   error: string | null;
   fetchAllCommunications: () => Promise<void>;
+  fetchCommunications: (customerId: string) => Promise<void>;
   fetchCommunicationsByStatus: (status: string) => Promise<Communication[]>;
   softDeleteCommunication: (id: string) => Promise<void>;
   sendEmail: (to: string, subject: string, body: string, customerId: string) => Promise<void>;
@@ -42,6 +43,31 @@ export const useCommunicationStore = create<CommunicationState>()(
           });
         } catch (error) {
           console.error('Error fetching communications:', error);
+          set({ 
+            error: (error as Error).message || 'Failed to fetch communications', 
+            loading: false,
+            communications: []
+          });
+        }
+      },
+
+      fetchCommunications: async (customerId: string) => {
+        set({ loading: true, error: null });
+        try {
+          const { data, error } = await supabase
+            .from('communications')
+            .select('*')
+            .eq('customerid', customerId)
+            .order('sentat', { ascending: false });
+          
+          if (error) throw error;
+          
+          set({ 
+            communications: data || [], 
+            loading: false 
+          });
+        } catch (error) {
+          console.error('Error fetching customer communications:', error);
           set({ 
             error: (error as Error).message || 'Failed to fetch communications', 
             loading: false,

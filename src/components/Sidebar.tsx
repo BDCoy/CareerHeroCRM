@@ -8,9 +8,9 @@ import {
   ChevronRight,
   MessageSquare,
   Mail,
-  Settings,
   FileText,
   LogOut,
+  FileText as TemplateIcon,
 } from "lucide-react";
 import { useCallback } from "react";
 import { useSidebar } from "../contexts/SidebarContext";
@@ -27,7 +27,6 @@ const Sidebar = () => {
     }
     return location.pathname.startsWith(path); // Highlight for subpages correctly
   };
-  
 
   const handleSignOut = useCallback(async () => {
     try {
@@ -109,8 +108,8 @@ const Sidebar = () => {
             <NavItem to="/dashboard" icon={Users} label="Customers" />
             <NavItem to="/dashboard/communications" icon={MessageSquare} label="Communications" />
             <NavItem to="/dashboard/email" icon={Mail} label="Email Center" />
+            <NavItem to="/dashboard/templates" icon={TemplateIcon} label="Templates" />
             <NavItem to="/dashboard/analytics" icon={BarChart3} label="Analytics" />
-            <NavItem to="/dashboard/settings" icon={Settings} label="Settings" />
           </nav>
 
           <div className="p-4 border-t border-gray-800">
